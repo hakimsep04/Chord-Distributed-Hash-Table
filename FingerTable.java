@@ -1,20 +1,23 @@
-import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
 import java.util.TreeMap;
 import java.net.InetAddress;
 
 public class FingerTable {
 	public int noOfEntries;
-	public HashMap<Integer, Integer> successorTable;
+	public TreeMap<Integer, Integer> successorTable;
 	public int nodeID;
 	public static final int MAX_NODES = 16;
 	
 	public FingerTable(int entries, int id) {
 		nodeID = id;
 		noOfEntries = entries;
-		successorTable = new HashMap<Integer, Integer>();		
+		successorTable = new TreeMap<Integer, Integer>();		
 	}
 	
-	public void newFingerTable(TreeMap<Integer, InetAddress> liveNodes) {
+	public void constructFingerTable(TreeMap<Integer, InetAddress> liveNodes) {
 		for (int i = 0; i<noOfEntries; i++) {
 			Object nodes[] = liveNodes.keySet().toArray();
 			int successor = 0;
@@ -40,5 +43,16 @@ public class FingerTable {
 			System.out.println(actualNode + " = " + successor);
 		}
 	}	
+	
+	public void printFingerTable() {
+		Set<Entry<Integer, Integer>> set = successorTable.entrySet();
+		Iterator<Entry<Integer, Integer>> iter = set.iterator();
+		System.out.println("Actual \t" + "Successor");
+		while (iter.hasNext()) {
+			Map.Entry<Integer, Integer> entry = (Map.Entry<Integer, Integer>) iter.next();
+			System.out.println(entry.getKey() + "\t" + entry.getValue());
+		}
+	}
+	
 	
 }
