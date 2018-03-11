@@ -120,6 +120,7 @@ class LiveNodeHandler extends Thread{
 				System.out.println("Sending livenodes list to " + nodeIP.toString());
 				Socket socket = new Socket(nodeIP, NODE_PORT);
 				outputStream = new ObjectOutputStream(socket.getOutputStream());
+				outputStream.writeObject("Finger Table");
 				outputStream.writeObject(liveNodes);
 			}
 		} catch (IOException e) {
