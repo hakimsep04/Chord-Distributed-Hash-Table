@@ -79,9 +79,6 @@ class LiveNodeHandler extends Thread{
 			synchronized (liveNodes) {
 				liveNodes.put(nodeID, peerIP);
 			}
-//			outputStream.writeObject(nodeID);
-//			outputStream.writeObject(liveNodes);
-//			System.out.println((String)inputStream.readObject());
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

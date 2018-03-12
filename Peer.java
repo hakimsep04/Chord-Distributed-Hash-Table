@@ -7,6 +7,7 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.InputMismatchException;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.TreeMap;
@@ -55,22 +56,22 @@ public class Peer implements Runnable {
 	public static void menu(Peer node) {
 		while (true) {
 			System.out.println(
-					"1. Join the network \n 2. Leave the network\n 3. Insert file\n 4. Show finger table \n 5.Show files in this machine");
+					"1. Join the network \n 2. Leave the network\n 3. Insert file\n \n 4. Search file \n 5. Show finger table \n 6. Show files in this machine");
 			Scanner scan = new Scanner(System.in);
 			System.out.println("Welcome");
 			try {
 				switch (scan.nextInt()) {
 				case 1:
-					if(!node.isOnline) {
+					if (!node.isOnline) {
 						node.enterNetwork();
 						System.out.println("Joined the network");
 						System.out.println("Waiting for livenodes list");
 						node.isOnline = true;
 						node.isFirst = true;
-					}else {
+					} else {
 						System.out.println("Node is already online");
 					}
-					
+
 					break;
 				case 2:
 					if (node.isOnline) {
@@ -95,6 +96,27 @@ public class Peer implements Runnable {
 					}
 					break;
 				case 4:
+					if (node.isOnline) {
+						System.out.println("Please enter file name");
+						String searchFile = scan.next();
+						if (node.files.contains(searchFile)) {
+							System.out.println("File " + searchFile + " found at " + node.guid);
+						} else {
+							int lookUpID = Math.abs(searchFile.hashCode() % MAX_NODES);
+							if (lookUpID == node.guid) {
+								System.out.println("Error: File not found!");
+							} else {
+								System.out.println("File id: " + lookUpID + " for lookup");
+								InetAddress sourceAddress = InetAddress.getLocalHost();
+								node.searchFile(sourceAddress, lookUpID, searchFile);
+							}
+
+						}
+					} else {
+						System.out.println("Node is offline! Cannot connect to network!");
+					}
+					break;
+				case 5:
 					System.out.println("Printing finger table");
 					if (node.isOnline) {
 						node.fingerTable.printFingerTable();
@@ -102,7 +124,7 @@ public class Peer implements Runnable {
 						System.err.println("Node is offline");
 					}
 					break;
-				case 5:
+				case 6:
 					if (node.files.size() == 0) {
 						System.out.println("No files in this machine!");
 					} else {
@@ -117,6 +139,9 @@ public class Peer implements Runnable {
 			} catch (InputMismatchException e) {
 				System.out.println("Invalid input");
 
+			} catch (UnknownHostException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
 		}
 	}
@@ -179,6 +204,55 @@ public class Peer implements Runnable {
 		fingerTable.constructFingerTable(liveNodes);
 	}
 
+	public void searchFile(InetAddress sourceAddress, int id, String file) {
+		try {
+			boolean isNodeAvailable = fingerTable.successorTable.containsKey(id);
+			if (isNodeAvailable) {
+				int successorId = fingerTable.successorTable.get(id);
+				queryNodeForFile(sourceAddress, successorId, file, successorId);
+			} else {
+
+				int sourceID;
+				int minDistance = 20;
+				System.out.println("Finding shortest distance between nodes");
+				TreeMap<Integer, Integer> nodesDistance = new TreeMap<Integer, Integer>();
+				for (Map.Entry<Integer, Integer> entry : fingerTable.successorTable.entrySet()) {
+					sourceID = entry.getKey();
+					int distance = distanceBetweenNodes(sourceID, id);
+					minDistance = Math.min(minDistance, distance);
+					nodesDistance.put(distance, sourceID);
+				}
+				System.out.println("Found the shortest distance");
+				int idToSend = nodesDistance.get(minDistance);
+				int successorId = fingerTable.successorTable.get(idToSend);
+				if (checkBetweenNodes(idToSend, successorId, id)) {
+					queryNodeForFile(sourceAddress, successorId, file, successorId);
+				} else {
+					queryNodeForFile(sourceAddress, successorId, file, id);
+				}
+
+			}
+		} finally {
+
+		}
+	}
+
+	public void queryNodeForFile(InetAddress sourceAddress, int successorId, String file, int fileID) {
+		try {
+			InetAddress successorIP = liveNodes.get(successorId);
+			Socket socket = new Socket(successorIP, LISTENING_PORT);
+			ObjectOutputStream opStream = new ObjectOutputStream(socket.getOutputStream());
+			opStream.writeObject("Query file");
+			opStream.writeObject(sourceAddress);
+			opStream.writeObject(file);
+			opStream.writeObject(fileID);
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+
+		}
+	}
+
 	public void insertFileAtID(int id, String file) {
 		if (id == guid) {
 			System.out.println("File :" + file + "inserted at :" + guid);
@@ -188,13 +262,13 @@ public class Peer implements Runnable {
 			boolean isNodeAvailable = fingerTable.successorTable.containsKey(id);
 			if (isNodeAvailable) {
 				int successorID = fingerTable.successorTable.get(id);
-				if(successorID == guid) {
+				if (successorID == guid) {
 					files.add(file);
 					System.out.println("File =" + file + " inserted at " + guid);
-				}else {
+				} else {
 					transferFileToNode(successorID, successorID, file, true);
 				}
-				
+
 			} else {
 				int sourceID;
 				int minDistance = 20;
@@ -209,16 +283,16 @@ public class Peer implements Runnable {
 				System.out.println("Found the shortest distance");
 				int idToSend = nodesDistance.get(minDistance);
 				int successorId = fingerTable.successorTable.get(idToSend);
-				if(successorId == guid) {
+				if (successorId == guid) {
 					files.add(file);
 					System.out.println("File =" + file + " inserted at " + guid);
-				}else {
+				} else {
 					if (checkBetweenNodes(idToSend, successorId, id)) {
 						transferFileToNode(successorId, successorId, file, true);
 					} else {
 						transferFileToNode(id, successorId, file, true);
 					}
-				}		
+				}
 
 			}
 
@@ -281,7 +355,7 @@ public class Peer implements Runnable {
 			if (isOnline) {
 				int id = fingerTable.successorTable.firstKey();
 				int successorID = fingerTable.successorTable.get(id);
-				if(successorID != guid) {
+				if (successorID != guid) {
 					System.out.println("Getting back files from successor");
 					InetAddress successorIP = liveNodes.get(successorID);
 					Socket socket = new Socket(successorIP, LISTENING_PORT);
@@ -296,12 +370,26 @@ public class Peer implements Runnable {
 					}
 					System.out.println("All files received from successor");
 				}
-				
+
 			}
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} finally {
+
+		}
+	}
+
+	public void searchFileQueryResponse(String message, InetAddress sourceAddress) {
+		try {
+			Socket socket = new Socket(sourceAddress, LISTENING_PORT);
+			ObjectOutputStream opStream = new ObjectOutputStream(socket.getOutputStream());
+			opStream.writeObject("Query response");
+			opStream.writeObject(message);
+		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} finally {
@@ -335,8 +423,6 @@ public class Peer implements Runnable {
 					System.out.println("File: " + file);
 					insertFileAtID(id, file);
 					break;
-				case "Find File":
-					break;
 				case "Transferring files":
 					ArrayList<String> tempFiles = (ArrayList<String>) inputStream.readObject();
 					for (String string : tempFiles) {
@@ -349,15 +435,42 @@ public class Peer implements Runnable {
 					ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
 					int incomingId = (int) inputStream.readObject();
 					ArrayList<String> preFiles = new ArrayList<String>();
-					for (String string : files) {
-						int fileID = Math.abs(string.hashCode());
-						if (fileID > guid || fileID <= incomingId) {
-							preFiles.add(string);
-							files.remove(string);
+					Iterator<String> iter = files.iterator();
+					while(iter.hasNext()) {
+						String fileToBeAdded = iter.next();
+						int fileID = Math.abs(fileToBeAdded.hashCode()%16);
+						if (checkBetweenNodes(guid, incomingId, fileID)) {
+							preFiles.add(fileToBeAdded);
+							iter.remove();
 						}
 					}
+//					for (String string : files) {
+//						int fileID = Math.abs(string.hashCode());
+//						if (fileID > guid || fileID <= incomingId) {
+//							preFiles.add(string);
+//							files.remove(string);
+//						}
+//					}
 					outputStream.writeObject(preFiles);
 					System.out.println("All files transferred to predecessor");
+					break;
+				case "Query file":
+					InetAddress sourceAddress = (InetAddress) inputStream.readObject();
+					String searchFile = (String) inputStream.readObject();
+					int fileID = (int) inputStream.readObject();
+					String message;
+					if (files.contains(searchFile)) {
+						message = "File :" + searchFile + " found at :" + guid;
+						searchFileQueryResponse(message, sourceAddress);
+					} else if (fileID == guid) {
+						message = "File :" + searchFile + " not found in the network";
+						searchFileQueryResponse(message, sourceAddress);
+					} else {
+						searchFile(sourceAddress, fileID, searchFile);
+					}
+					break;
+				case "Query response":
+					System.out.println((String) inputStream.readObject());
 					break;
 				}
 			}
