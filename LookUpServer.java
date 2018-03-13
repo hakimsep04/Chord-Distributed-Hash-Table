@@ -20,7 +20,6 @@ public class LookUpServer {
 		while (true) {
 			System.out.println("waiting on port 5000");
 			Socket clientSocket = serverSocket.accept();
-			System.out.println("New node joined the network");
 			ObjectOutputStream outputStream = new ObjectOutputStream(clientSocket.getOutputStream());
 			ObjectInputStream inputStream = new ObjectInputStream(clientSocket.getInputStream());
 			// Routes all requests to the node handler
@@ -79,17 +78,19 @@ class LiveNodeHandler extends Thread {
 				if (!liveNodes.containsKey(nodeID)) {
 					liveNodes.put(nodeID, peerIP);
 					outputStream.writeObject("Welcome " + nodeID);
+					System.out.println("Node :" + nodeID + " joined the network");
+					sendLiveNodes();
 				} else {
 					outputStream.writeObject(nodeID + " is already in use!");
+					System.out.println("Node :" + nodeID + " duplicate node! Connection refused!");
 				}
-
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		} finally {
-			sendLiveNodes();
+
 		}
 	}
 

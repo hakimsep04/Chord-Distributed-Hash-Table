@@ -69,6 +69,7 @@ public class Peer implements Runnable {
 	public static void menu(Peer node) {
 		while (true) {
 			System.out.println("********************** MENU BEGIN ************************");
+			System.out.println("GUID : " + node.guid);
 			System.out.println("\t\t"
 					+ "1. Join the network \n \t\t2. Leave the network \n \t\t3. Insert file \n \t\t4. Search file \n \t\t5. Show finger table \n \t\t6. Show files in this machine");
 			System.out.println("********************** MENU END ************************");
@@ -79,10 +80,6 @@ public class Peer implements Runnable {
 					// Join network only if the node is offline.
 					if (!node.isOnline) {
 						node.enterNetwork();
-						System.out.println("Joined the network");
-						System.out.println("Waiting for livenodes list");
-						node.isOnline = true;
-						node.isFirst = true;
 					} else {
 						System.out.println("Node is already online");
 					}
@@ -202,7 +199,14 @@ public class Peer implements Runnable {
 			connect();
 			outputStream.writeObject("Joining");
 			outputStream.writeObject(guid);
-			System.out.println((String) inputstream.readObject());
+			String response = (String) inputstream.readObject();
+			System.out.println(response);
+			if(!response.equalsIgnoreCase(guid + " is already in use!")) {
+				System.out.println("Joined the network");
+				System.out.println("Waiting for livenodes list");
+				isOnline = true;
+				isFirst = true;
+			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (ClassNotFoundException e) {
