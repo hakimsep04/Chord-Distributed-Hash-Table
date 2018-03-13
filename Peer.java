@@ -12,6 +12,14 @@ import java.util.Map;
 import java.util.Scanner;
 import java.util.TreeMap;
 
+/*
+ * @author: Abdul Hakim Shanavas
+ * Rochester Institute of Technology
+ * 
+ * Peer class is the node in the network. This class communicates with LookUp server for joining a network. 
+ * Besides that, all communication is only between nodes for file insertion, retrieval.  
+ */
+
 public class Peer implements Runnable {
 	private ObjectInputStream inputstream;
 	private ObjectOutputStream outputStream;
@@ -30,7 +38,6 @@ public class Peer implements Runnable {
 	private ArrayList<String> files;
 
 	public Peer(int guid, String host) {
-		// TODO Auto-generated constructor stub
 		this.guid = guid;
 		this.host = host;
 		files = new ArrayList<String>();
@@ -41,6 +48,7 @@ public class Peer implements Runnable {
 	}
 
 	public static void main(String[] args) throws ClassNotFoundException {
+		// Check for command line arguments
 		if (args.length < 2) {
 			System.out.println("Please provide guid and network host");
 			System.exit(11);
@@ -51,31 +59,24 @@ public class Peer implements Runnable {
 			System.exit(11);
 		}
 		Peer node = new Peer(id, args[1]);
+		// Handling fault tolerance. This will get triggered when the JVM exists
+		// unexpectedly ( Eg.: Ctrl-C )
 		Runtime.getRuntime().addShutdownHook(node.faultToleranceHandler);
-//		Runtime.getRuntime().addShutdownHook(new Thread()
-//	    {
-//	      public void run()
-//	      {
-//	        System.out.println("Shutdown Hook is running !");
-//	      }
-//	    });
+		// Main menu
 		menu(node);
-		
-		
-		
-
 	}
 
 	public static void menu(Peer node) {
 		while (true) {
 			System.out.println("********************** MENU BEGIN ************************");
-			System.out.println("\t\t" +
-					"1. Join the network \n 2. Leave the network \n 3. Insert file \n 4. Search file \n 5. Show finger table \n 6. Show files in this machine");
+			System.out.println("\t\t"
+					+ "1. Join the network \n \t\t2. Leave the network \n \t\t3. Insert file \n \t\t4. Search file \n \t\t5. Show finger table \n \t\t6. Show files in this machine");
 			System.out.println("********************** MENU END ************************");
 			Scanner scan = new Scanner(System.in);
 			try {
 				switch (scan.nextInt()) {
 				case 1:
+					// Join network only if the node is offline.
 					if (!node.isOnline) {
 						node.enterNetwork();
 						System.out.println("Joined the network");
@@ -88,6 +89,7 @@ public class Peer implements Runnable {
 
 					break;
 				case 2:
+					// Leave network only when the node is already online
 					if (node.isOnline) {
 						node.leaveNetwork();
 						node.isOnline = false;
@@ -96,9 +98,9 @@ public class Peer implements Runnable {
 					} else {
 						System.out.println("Node is already offline");
 					}
-
 					break;
 				case 3:
+					// Insert file into the network by matching the key(hashed file) to guid
 					if (node.isOnline) {
 						System.out.println("Please enter file name");
 						String file = scan.next();
@@ -110,27 +112,31 @@ public class Peer implements Runnable {
 					}
 					break;
 				case 4:
+					// Search for a file. First locally then check in the network.
 					if (node.isOnline) {
 						System.out.println("Please enter file name");
 						String searchFile = scan.next();
+						// Checking for files in the local machine
 						if (node.files.contains(searchFile)) {
 							System.out.println("File " + searchFile + " found at " + node.guid);
 						} else {
+							// If the file supposed to be in the local machine but it is not found, then
+							// display file not found
 							int lookUpID = Math.abs(searchFile.hashCode() % MAX_NODES);
 							if (lookUpID == node.guid) {
-								System.out.println("Error: File not found!");
+								System.err.println("Error: File not found!");
 							} else {
 								System.out.println("File id: " + lookUpID + " for lookup");
 								InetAddress sourceAddress = InetAddress.getLocalHost();
 								node.searchFile(sourceAddress, lookUpID, searchFile);
 							}
-
 						}
 					} else {
 						System.out.println("Node is offline! Cannot connect to network!");
 					}
 					break;
 				case 5:
+					// Prints the finger table
 					System.out.println("Printing finger table");
 					if (node.isOnline) {
 						node.fingerTable.printFingerTable();
@@ -139,6 +145,7 @@ public class Peer implements Runnable {
 					}
 					break;
 				case 6:
+					// Shows the file present in the local machine
 					System.out.println("********************** FILES ************************");
 					if (node.files.size() == 0) {
 						System.out.println("No files in this machine!");
@@ -148,7 +155,7 @@ public class Peer implements Runnable {
 							System.out.println("\t\t" + fileName);
 						}
 					}
-					System.out.println("********************** FILES ************************");
+					System.out.println("********************** FILES END ************************");
 				}
 
 			} catch (InputMismatchException e) {
@@ -158,11 +165,12 @@ public class Peer implements Runnable {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			} finally {
-				
+
 			}
 		}
 	}
 
+	// Connects to LookUp server
 	public void connect() {
 		try {
 			InetAddress serverIP = InetAddress.getByName(host);
@@ -176,6 +184,7 @@ public class Peer implements Runnable {
 		}
 	}
 
+	// Close the connection between node and the LookUp server
 	public void closeConnection() {
 		try {
 			outputStream.close();
@@ -187,12 +196,13 @@ public class Peer implements Runnable {
 		}
 	}
 
+	// Connect to server and go online
 	public void enterNetwork() {
 		try {
 			connect();
 			outputStream.writeObject("Joining");
 			outputStream.writeObject(guid);
-			System.out.println((String)inputstream.readObject());
+			System.out.println((String) inputstream.readObject());
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (ClassNotFoundException e) {
@@ -203,6 +213,8 @@ public class Peer implements Runnable {
 		}
 	}
 
+	// Connect to server and go offline. Also send all the files in the system to
+	// the immediate successor.
 	public void leaveNetwork() {
 		try {
 			connect();
@@ -218,7 +230,8 @@ public class Peer implements Runnable {
 			closeConnection();
 		}
 	}
-	
+
+	// Transfer files to immediate successor when node shuts down unexpectedly
 	public void FaultToleranceLeaveNetwork(int successor) {
 		try {
 			connect();
@@ -233,19 +246,26 @@ public class Peer implements Runnable {
 		}
 	}
 
+	// Constructs the finger table based on the live nodes in the network
 	public void constructFingerTable() {
 		fingerTable = new FingerTable(4, guid);
 		fingerTable.constructFingerTable(liveNodes);
 	}
 
+	// Search file based in the network and send the source address for the node
+	// which has file to directly connect and return the file
 	public void searchFile(InetAddress sourceAddress, int id, String file) {
 		try {
 			boolean isNodeAvailable = fingerTable.successorTable.containsKey(id);
+			// First checks the file's owner in the finger table. If the node in the finger
+			// table is supposed to have the file, then query to it's successor for file.
 			if (isNodeAvailable) {
 				int successorId = fingerTable.successorTable.get(id);
 				queryNodeForFile(sourceAddress, successorId, file, successorId);
 			} else {
-
+				// If the node is not in the finger table, query the closest node for the file
+				// which will in turn check it's finger table and send query to the actual
+				// successor
 				int sourceID;
 				int minDistance = Integer.MAX_VALUE;
 				TreeMap<Integer, Integer> nodesDistance = new TreeMap<Integer, Integer>();
@@ -257,18 +277,21 @@ public class Peer implements Runnable {
 				}
 				int idToSend = nodesDistance.get(minDistance);
 				int successorId = fingerTable.successorTable.get(idToSend);
+				// If the node to be searched is between the actual and successor node then
+				// query the successor for the file, else query the successor to query the
+				// actual node which has the file.
 				if (checkBetweenNodes(idToSend, successorId, id)) {
 					queryNodeForFile(sourceAddress, successorId, file, successorId);
 				} else {
 					queryNodeForFile(sourceAddress, successorId, file, id);
 				}
-
 			}
 		} finally {
 
 		}
 	}
 
+	//Method which is responsible for querying the nodes in the network for searching a file
 	public void queryNodeForFile(InetAddress sourceAddress, int successorId, String file, int fileID) {
 		try {
 			InetAddress successorIP = liveNodes.get(successorId);
@@ -286,6 +309,7 @@ public class Peer implements Runnable {
 		}
 	}
 
+	//Same as the searching file, except that it has to insert the file in that particular node.
 	public void insertFileAtID(int id, String file) {
 		if (id == guid) {
 			System.out.println("File : " + file + " inserted at : " + guid);
@@ -330,6 +354,7 @@ public class Peer implements Runnable {
 
 	}
 
+	//Returns true if the node looking for is between the actual and successor node.
 	public boolean checkBetweenNodes(int startNode, int endNode, int actualNode) {
 		int i = startNode;
 		boolean isBetween = false;
@@ -343,6 +368,7 @@ public class Peer implements Runnable {
 		return isBetween;
 	}
 
+	//Finds the distance between any two nodes in the network
 	public int distanceBetweenNodes(int sourceId, int destId) {
 		int distance = 1;
 		int result;
@@ -356,6 +382,7 @@ public class Peer implements Runnable {
 		return distance;
 	}
 
+	//Transfers files from local to the respective node in the network
 	public void transferFileToNode(int idToBeInserted, int successorID, String file, boolean isFile) {
 		try {
 			InetAddress successorIP = liveNodes.get(successorID);
@@ -363,7 +390,8 @@ public class Peer implements Runnable {
 			ObjectOutputStream opStream = new ObjectOutputStream(socket.getOutputStream());
 			if (isFile) {
 				opStream.writeObject("Insert file");
-				System.out.println("File : " + file + " = " + Math.abs(file.hashCode()%16) + " routed to : " + successorID);
+				System.out.println(
+						"File : " + file + " = " + Math.abs(file.hashCode() % 16) + " routed to : " + successorID);
 				opStream.writeObject(idToBeInserted);
 				opStream.writeObject(file);
 			} else {
@@ -379,6 +407,7 @@ public class Peer implements Runnable {
 		}
 	}
 
+	//Get files from the successor when a node comes online
 	@SuppressWarnings("unchecked")
 	public void getFilesFromSuccessor() {
 		try {
@@ -413,6 +442,7 @@ public class Peer implements Runnable {
 		}
 	}
 
+	//Catching the response for the query sent for searching a file in the network. 
 	public void searchFileQueryResponse(String message, InetAddress sourceAddress) {
 		try {
 			Socket socket = new Socket(sourceAddress, LISTENING_PORT);
@@ -426,7 +456,8 @@ public class Peer implements Runnable {
 
 		}
 	}
-
+	
+	//Thread which listens to all the incoming calls from other nodes and server in the network
 	@SuppressWarnings("unchecked")
 	@Override
 	public void run() {
@@ -467,9 +498,9 @@ public class Peer implements Runnable {
 					int incomingId = (int) inputStream.readObject();
 					ArrayList<String> preFiles = new ArrayList<String>();
 					Iterator<String> iter = files.iterator();
-					while(iter.hasNext()) {
+					while (iter.hasNext()) {
 						String fileToBeAdded = iter.next();
-						int fileID = Math.abs(fileToBeAdded.hashCode()%16);
+						int fileID = Math.abs(fileToBeAdded.hashCode() % 16);
 						if (checkBetweenNodes(guid, incomingId, fileID)) {
 							preFiles.add(fileToBeAdded);
 							iter.remove();
@@ -513,10 +544,11 @@ public class Peer implements Runnable {
 
 }
 
-class FaultToleranceHandler extends Thread{
+//Fault tolerance thread. This thread gets triggered only when JVM shuts down unexpectedly. 
+class FaultToleranceHandler extends Thread {
 	public Peer node;
 	public int successorID;
-	
+
 	public FaultToleranceHandler(Peer node) {
 		// TODO Auto-generated constructor stub
 		this.node = node;
@@ -526,12 +558,11 @@ class FaultToleranceHandler extends Thread{
 	public void run() {
 		// TODO Auto-generated method stub
 		System.out.println("");
-		if(node.isOnline) {
+		if (node.isOnline) {
 			node.FaultToleranceLeaveNetwork(successorID);
 		}
 		System.out.println("Unexpected shutdown");
-		
-	}
-	
-}
 
+	}
+
+}

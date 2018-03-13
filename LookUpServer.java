@@ -7,45 +7,49 @@ import java.net.Socket;
 import java.util.Map;
 import java.util.TreeMap;
 
-//import org.apache.commons.codec.digest.DigestUtils;
+/*
+ * @author: Abdul Hakim Shanavas
+ * Server class for keeping track of live nodes in the network and updating the list to all the nodes in the network
+ */
 
 public class LookUpServer {
-	
+
 	public static void main(String[] args) throws IOException {
 		ServerSocket serverSocket = new ServerSocket(5000);
-		
-		while(true) {
+
+		while (true) {
 			System.out.println("waiting on port 5000");
 			Socket clientSocket = serverSocket.accept();
 			System.out.println("New node joined the network");
 			ObjectOutputStream outputStream = new ObjectOutputStream(clientSocket.getOutputStream());
 			ObjectInputStream inputStream = new ObjectInputStream(clientSocket.getInputStream());
+			// Routes all requests to the node handler
 			Thread peerHandler = new LiveNodeHandler(clientSocket, inputStream, outputStream);
 			peerHandler.start();
-			
+
 		}
 	}
 }
 
-
-class LiveNodeHandler extends Thread{
+class LiveNodeHandler extends Thread {
 	ObjectInputStream inputStream;
 	ObjectOutputStream outputStream;
 	Socket peerSocket;
 	private static final int NODE_PORT = 8000;
 	public static final int MAX_NODES = 16;
-	private static TreeMap<Integer , InetAddress> liveNodes = new TreeMap<Integer , InetAddress>();
-	
+	private static TreeMap<Integer, InetAddress> liveNodes = new TreeMap<Integer, InetAddress>();
+
 	public LiveNodeHandler(Socket socket, ObjectInputStream is, ObjectOutputStream os) throws IOException {
 		this.peerSocket = socket;
 		this.inputStream = is;
 		this.outputStream = os;
 	}
-	
-	public void run(){
-		
+
+	public void run() {
+		// Node connects to server only for joining the network and for leaving the
+		// network
 		try {
-			switch ((String)inputStream.readObject()) {
+			switch ((String) inputStream.readObject()) {
 			case "Joining":
 				nodeJoiningNetwork();
 				break;
@@ -55,47 +59,42 @@ class LiveNodeHandler extends Thread{
 				break;
 			}
 		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}finally {
-			
+		} finally {
+
 		}
 
 	}
-	
+
+	// Adds the node to the list of live nodes. If the node id is already online
+	// then rejects the node with appropriate message.
 	public void nodeJoiningNetwork() {
 		try {
 			InetAddress peerIP = peerSocket.getInetAddress();
-//			System.out.println(peerIP.toString());
-//			String sha = DigestUtils.sha1Hex(peerIP.toString());
-//			System.out.println("sha1 = "+sha);
-//			
-//			BigInteger maxNodes = new BigInteger("16");
-			int nodeID = (int)inputStream.readObject();
+			int nodeID = (int) inputStream.readObject();
 			System.out.println(nodeID);
 			synchronized (liveNodes) {
-				if(!liveNodes.containsKey(nodeID)) {
+				if (!liveNodes.containsKey(nodeID)) {
 					liveNodes.put(nodeID, peerIP);
 					outputStream.writeObject("Welcome " + nodeID);
-				}else {
+				} else {
 					outputStream.writeObject(nodeID + " is already in use!");
 				}
-				
+
 			}
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}finally {
+		} finally {
 			sendLiveNodes();
 		}
 	}
-	
+
+	// Removes the node from the live nodes list and sends the updated live nodes
+	// list to all the nodes in the network
 	public void nodeLeavingNetwork() {
 		try {
 			InetAddress peerIP = peerSocket.getInetAddress();
@@ -106,19 +105,18 @@ class LiveNodeHandler extends Thread{
 			}
 			sendLiveNodes();
 		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}finally {
-			
+		} finally {
+
 		}
 	}
-	
+
+	// Sending live nodes to all the nodes in the network.
 	public void sendLiveNodes() {
 		try {
-			for(Map.Entry<Integer, InetAddress> entry: liveNodes.entrySet() ) {
+			for (Map.Entry<Integer, InetAddress> entry : liveNodes.entrySet()) {
 				InetAddress nodeIP = entry.getValue();
 				System.out.println("Sending livenodes list to " + nodeIP.toString());
 				Socket socket = new Socket(nodeIP, NODE_PORT);
@@ -127,10 +125,9 @@ class LiveNodeHandler extends Thread{
 				outputStream.writeObject(liveNodes);
 			}
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}finally {
-			
+		} finally {
+
 		}
 	}
 }

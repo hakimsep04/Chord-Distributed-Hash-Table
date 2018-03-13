@@ -1,10 +1,14 @@
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.net.InetAddress;
+
+/*
+ * @author: Abdul Hakim Shanavas
+ * Finger table object for each node in the network
+ */
 
 public class FingerTable {
 	public int noOfEntries;
@@ -19,6 +23,7 @@ public class FingerTable {
 		successorTable = new TreeMap<Integer, Integer>();		
 	}
 	
+	//Constructs finger table based on the live nodes in the network
 	public void constructFingerTable(TreeMap<Integer, InetAddress> liveNodes) {
 		System.out.println("********************** FINGER TABLE ************************");
 		for (int i = 0; i<noOfEntries; i++) {
@@ -51,6 +56,7 @@ public class FingerTable {
 		System.out.println("********************** END ************************");
 	}	
 	
+	//Iterates through finger table and prints each entry in the finger table
 	public void printFingerTable() {
 		System.out.println("********************** FINGER TABLE ************************");
 		Set<Entry<Integer, Integer>> set = successorTable.entrySet();
