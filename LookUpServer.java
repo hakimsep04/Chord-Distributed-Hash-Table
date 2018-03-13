@@ -77,7 +77,13 @@ class LiveNodeHandler extends Thread{
 			int nodeID = (int)inputStream.readObject();
 			System.out.println(nodeID);
 			synchronized (liveNodes) {
-				liveNodes.put(nodeID, peerIP);
+				if(!liveNodes.containsKey(nodeID)) {
+					liveNodes.put(nodeID, peerIP);
+					outputStream.writeObject("Welcome " + nodeID);
+				}else {
+					outputStream.writeObject(nodeID + " is already in use!");
+				}
+				
 			}
 		} catch (IOException e) {
 			// TODO Auto-generated catch block

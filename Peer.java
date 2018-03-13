@@ -18,9 +18,10 @@ public class Peer implements Runnable {
 	private Socket nodeSocket;
 	private String host;
 	private int guid;
-	private boolean isOnline = false;
+	public boolean isOnline = false;
 	private boolean isFirst = false;
 	private FingerTable fingerTable;
+	private FaultToleranceHandler faultToleranceHandler;
 	private Thread listeningThread;
 	private TreeMap<Integer, InetAddress> liveNodes;
 	private static final int PORT = 5000;
@@ -34,6 +35,7 @@ public class Peer implements Runnable {
 		this.host = host;
 		files = new ArrayList<String>();
 		listeningThread = new Thread(this);
+		faultToleranceHandler = new FaultToleranceHandler(this);
 		listeningThread.setDaemon(true);
 		listeningThread.start();
 	}
@@ -49,16 +51,28 @@ public class Peer implements Runnable {
 			System.exit(11);
 		}
 		Peer node = new Peer(id, args[1]);
+		Runtime.getRuntime().addShutdownHook(node.faultToleranceHandler);
+//		Runtime.getRuntime().addShutdownHook(new Thread()
+//	    {
+//	      public void run()
+//	      {
+//	        System.out.println("Shutdown Hook is running !");
+//	      }
+//	    });
 		menu(node);
+		
+		
+		
 
 	}
 
 	public static void menu(Peer node) {
 		while (true) {
-			System.out.println(
-					"1. Join the network \n 2. Leave the network\n 3. Insert file\n \n 4. Search file \n 5. Show finger table \n 6. Show files in this machine");
+			System.out.println("********************** MENU BEGIN ************************");
+			System.out.println("\t\t" +
+					"1. Join the network \n 2. Leave the network \n 3. Insert file \n 4. Search file \n 5. Show finger table \n 6. Show files in this machine");
+			System.out.println("********************** MENU END ************************");
 			Scanner scan = new Scanner(System.in);
-			System.out.println("Welcome");
 			try {
 				switch (scan.nextInt()) {
 				case 1:
@@ -125,6 +139,7 @@ public class Peer implements Runnable {
 					}
 					break;
 				case 6:
+					System.out.println("********************** FILES ************************");
 					if (node.files.size() == 0) {
 						System.out.println("No files in this machine!");
 					} else {
@@ -133,15 +148,17 @@ public class Peer implements Runnable {
 							System.out.println("\t\t" + fileName);
 						}
 					}
-
+					System.out.println("********************** FILES ************************");
 				}
 
 			} catch (InputMismatchException e) {
-				System.out.println("Invalid input");
+				System.err.println("Invalid input");
 
 			} catch (UnknownHostException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
+			} finally {
+				
 			}
 		}
 	}
@@ -165,7 +182,7 @@ public class Peer implements Runnable {
 			inputstream.close();
 			nodeSocket.close();
 		} catch (IOException e) {
-			System.out.println("Connection Error");
+			System.err.println("Connection Error");
 			System.exit(1);
 		}
 	}
@@ -175,8 +192,11 @@ public class Peer implements Runnable {
 			connect();
 			outputStream.writeObject("Joining");
 			outputStream.writeObject(guid);
-			System.out.println("GUID : " + guid);
+			System.out.println((String)inputstream.readObject());
 		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} finally {
 			closeConnection();
@@ -188,8 +208,22 @@ public class Peer implements Runnable {
 			connect();
 			outputStream.writeObject("Going offline");
 			outputStream.writeObject(guid);
-			int id = fingerTable.successorTable.firstKey();
+			int id = fingerTable.firstActualNode;
 			int successor = fingerTable.successorTable.get(id);
+			transferFileToNode(successor, successor, "", false);
+
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			closeConnection();
+		}
+	}
+	
+	public void FaultToleranceLeaveNetwork(int successor) {
+		try {
+			connect();
+			outputStream.writeObject("Going offline");
+			outputStream.writeObject(guid);
 			transferFileToNode(successor, successor, "", false);
 
 		} catch (IOException e) {
@@ -213,8 +247,7 @@ public class Peer implements Runnable {
 			} else {
 
 				int sourceID;
-				int minDistance = 20;
-				System.out.println("Finding shortest distance between nodes");
+				int minDistance = Integer.MAX_VALUE;
 				TreeMap<Integer, Integer> nodesDistance = new TreeMap<Integer, Integer>();
 				for (Map.Entry<Integer, Integer> entry : fingerTable.successorTable.entrySet()) {
 					sourceID = entry.getKey();
@@ -222,7 +255,6 @@ public class Peer implements Runnable {
 					minDistance = Math.min(minDistance, distance);
 					nodesDistance.put(distance, sourceID);
 				}
-				System.out.println("Found the shortest distance");
 				int idToSend = nodesDistance.get(minDistance);
 				int successorId = fingerTable.successorTable.get(idToSend);
 				if (checkBetweenNodes(idToSend, successorId, id)) {
@@ -240,6 +272,7 @@ public class Peer implements Runnable {
 	public void queryNodeForFile(InetAddress sourceAddress, int successorId, String file, int fileID) {
 		try {
 			InetAddress successorIP = liveNodes.get(successorId);
+			System.out.println("Querying for file : " + file + " to node : " + successorId);
 			Socket socket = new Socket(successorIP, LISTENING_PORT);
 			ObjectOutputStream opStream = new ObjectOutputStream(socket.getOutputStream());
 			opStream.writeObject("Query file");
@@ -255,16 +288,15 @@ public class Peer implements Runnable {
 
 	public void insertFileAtID(int id, String file) {
 		if (id == guid) {
-			System.out.println("File :" + file + "inserted at :" + guid);
+			System.out.println("File : " + file + " inserted at : " + guid);
 			files.add(file);
 		} else {
-			System.out.println("Inside else of insert file");
 			boolean isNodeAvailable = fingerTable.successorTable.containsKey(id);
 			if (isNodeAvailable) {
 				int successorID = fingerTable.successorTable.get(id);
 				if (successorID == guid) {
 					files.add(file);
-					System.out.println("File =" + file + " inserted at " + guid);
+					System.out.println("File = " + file + " inserted at " + guid);
 				} else {
 					transferFileToNode(successorID, successorID, file, true);
 				}
@@ -272,7 +304,6 @@ public class Peer implements Runnable {
 			} else {
 				int sourceID;
 				int minDistance = 20;
-				System.out.println("Finding shortest distance between nodes");
 				TreeMap<Integer, Integer> nodesDistance = new TreeMap<Integer, Integer>();
 				for (Map.Entry<Integer, Integer> entry : fingerTable.successorTable.entrySet()) {
 					sourceID = entry.getKey();
@@ -280,12 +311,11 @@ public class Peer implements Runnable {
 					minDistance = Math.min(minDistance, distance);
 					nodesDistance.put(distance, sourceID);
 				}
-				System.out.println("Found the shortest distance");
 				int idToSend = nodesDistance.get(minDistance);
 				int successorId = fingerTable.successorTable.get(idToSend);
 				if (successorId == guid) {
 					files.add(file);
-					System.out.println("File =" + file + " inserted at " + guid);
+					System.out.println("File = " + file + " inserted at " + guid);
 				} else {
 					if (checkBetweenNodes(idToSend, successorId, id)) {
 						transferFileToNode(successorId, successorId, file, true);
@@ -333,7 +363,7 @@ public class Peer implements Runnable {
 			ObjectOutputStream opStream = new ObjectOutputStream(socket.getOutputStream());
 			if (isFile) {
 				opStream.writeObject("Insert file");
-				System.out.println("File :" + file + " = " + idToBeInserted + " routed to :" + successorID);
+				System.out.println("File : " + file + " = " + Math.abs(file.hashCode()%16) + " routed to : " + successorID);
 				opStream.writeObject(idToBeInserted);
 				opStream.writeObject(file);
 			} else {
@@ -353,7 +383,7 @@ public class Peer implements Runnable {
 	public void getFilesFromSuccessor() {
 		try {
 			if (isOnline) {
-				int id = fingerTable.successorTable.firstKey();
+				int id = fingerTable.firstActualNode;
 				int successorID = fingerTable.successorTable.get(id);
 				if (successorID != guid) {
 					System.out.println("Getting back files from successor");
@@ -411,6 +441,7 @@ public class Peer implements Runnable {
 					liveNodes = (TreeMap<Integer, InetAddress>) inputStream.readObject();
 					System.out.println("Received livenodes");
 					constructFingerTable();
+					faultToleranceHandler.successorID = fingerTable.successorTable.get(fingerTable.firstActualNode);
 					if (isFirst) {
 						isFirst = false;
 						getFilesFromSuccessor();
@@ -444,13 +475,6 @@ public class Peer implements Runnable {
 							iter.remove();
 						}
 					}
-//					for (String string : files) {
-//						int fileID = Math.abs(string.hashCode());
-//						if (fileID > guid || fileID <= incomingId) {
-//							preFiles.add(string);
-//							files.remove(string);
-//						}
-//					}
 					outputStream.writeObject(preFiles);
 					System.out.println("All files transferred to predecessor");
 					break;
@@ -488,3 +512,26 @@ public class Peer implements Runnable {
 	}
 
 }
+
+class FaultToleranceHandler extends Thread{
+	public Peer node;
+	public int successorID;
+	
+	public FaultToleranceHandler(Peer node) {
+		// TODO Auto-generated constructor stub
+		this.node = node;
+	}
+
+	@Override
+	public void run() {
+		// TODO Auto-generated method stub
+		System.out.println("");
+		if(node.isOnline) {
+			node.FaultToleranceLeaveNetwork(successorID);
+		}
+		System.out.println("Unexpected shutdown");
+		
+	}
+	
+}
+
